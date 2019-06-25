@@ -1,0 +1,170 @@
+---
+title: "Dicas para visualizar e transformar os dados"
+output:
+    html_document:
+    df_print: paged
+theme: sandstone
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+source(here::here("code/lib.R"))
+theme_set(theme_bw())
+```
+
+
+```{r read}
+atividade = read_projectdata()
+```
+
+## Temos bastante NA
+
+Quando um parlamentar não tem conta no twitter, o valor da coluna twitter é `NA`, Not Available. Quando você estiver interessado apenas em quem tem twitter, é preciso filtrá-los. 
+
+```{r}
+atividade %>% 
+  filter(!is.na(twitter))
+```
+
+```{r}
+atividade %>% 
+  mutate(tem_twitter = !is.na(twitter)) %>% 
+  summarise(proporcao_com_twitter = sum(tem_twitter) / n()) # n diz o número de linhas do grupo
+```
+
+```{r}
+atividade %>% 
+  mutate(tuitou = !is.na(twitter) & (n_proprio + n_retweet > 0)) %>% 
+  summarise(proporcao_ativa = sum(tuitou) / n()) # n diz o número de linhas do grupo
+```
+
+
+## Visualizando muitos nomes em um eixo
+
+Muitos nomes no eixo horizontal é impraticável:
+
+```{r}
+atividade %>% 
+  filter(!is.na(seguidores), UF == "PB") %>% 
+  ggplot(aes(x = nome_eleitoral, y = seguidores)) + 
+  geom_col()
+```
+
+A solução é "flipar" os eixos:
+
+```{r}
+atividade %>% 
+  filter(!is.na(seguidores), UF == "PB") %>% 
+  ggplot(aes(x = nome_eleitoral, y = seguidores)) + 
+  geom_col() + 
+  coord_flip()
+
+```
+
+## Nomes nos eixos
+
+```{r}
+atividade %>% 
+  filter(!is.na(seguidores)) %>% 
+  ggplot(aes(x = UF, y = seguidores)) + 
+  geom_jitter(width = .1) + 
+  labs(
+    x = "UF do parlamentar", 
+    y = "Seguidores no twitter"
+  )
+```
+
+## Ordenar os eixos categóricos
+
+```{r}
+atividade %>% 
+  filter(!is.na(seguidores)) %>% 
+  ggplot(aes(x = reorder(UF, seguidores, mean), y = seguidores)) + 
+  geom_jitter(width = .1, alpha = .5) + 
+  labs(
+    x = "UF do parlamentar", 
+    y = "Seguidores no twitter"
+  )
+```
+
+## Transforme antes de visualizar
+
+Para visualizar a mediana do número de seguidores por estado, por exemplo: 
+
+```{r}
+atividade %>%
+  filter(!is.na(seguidores)) %>%
+  group_by(UF) %>%
+  summarise(mediana_seguidores = median(seguidores)) %>% 
+  ggplot(aes(x = reorder(UF, mediana_seguidores), y = mediana_seguidores)) +
+  geom_point() +
+  labs(x = "UF do parlamentar",
+       y = "Mediana de seguidores dos parlamentares")
+```
+
+O `summarise` pode gerar mais de uma variável. E a função `n()` diz o número de linhas no grupo, o que é muito útil:
+
+```{r}
+atividade %>%
+  filter(!is.na(seguidores)) %>%
+  group_by(UF) %>%
+  summarise(mediana_seguidores = median(seguidores),
+            parlamentares = n()) %>%
+  ggplot(aes(
+    x = reorder(UF, mediana_seguidores),
+    y = mediana_seguidores,
+    size = parlamentares
+  )) +
+  geom_point(alpha = .8) +
+  coord_flip() +
+  labs(x = "UF do parlamentar",
+       y = "Mediana de seguidores dos parlamentares", 
+       size = "Ativos no twitter")
+```
+
+## Mostrar resumo e dados
+
+Primeiro gere os dados transformados que são o resumo que você quer mostrar junto com os detalhes. 
+
+```{r}
+ne_no_twitter = atividade %>%
+  filter(UF %in% c("PB", "PE", "RN", "BA", "CE", "MA", "PI", "SE", "AL"),
+         !is.na(seguidores)) 
+  
+ne_sumario = ne_no_twitter %>% 
+  group_by(UF) %>% 
+  summarise(media = mean(seguidores))
+
+glimpse(ne_sumario)
+```
+
+Depois sobreponha os dois. Repare no parâmetro data, e que o mapping é diferente nas diferentes camadas. 
+
+```{r}
+ggplot() + 
+  geom_jitter(data = ne_no_twitter, 
+              mapping = aes(x = reorder(UF, seguidores), y = seguidores), 
+              width = .3, 
+              alpha = .4) + 
+  geom_point(data = ne_sumario, 
+             mapping = aes(x = UF, y = media), 
+             color = "red", 
+             size = 3)
+```
+
+O boxplot ou density plots são um atalho...
+
+```{r}
+atividade %>% 
+  filter(!is.na(seguidores), 
+         UF %in% c("PB", "PE", "RN", "BA", "CE", "MA", "PI", "SE", "AL")) %>% 
+  ggplot(aes(x = reorder(UF, seguidores, mean), y = seguidores)) + 
+  geom_boxplot(width = .5, coef = 1000, color = "grey30") + 
+  geom_jitter(width = .1, alpha = .7, color = "orange") + 
+  coord_flip() + 
+  labs(
+    x = "UF do parlamentar", 
+    y = "Seguidores no twitter"
+  )
+```
+
