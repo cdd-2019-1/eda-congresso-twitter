@@ -1,0 +1,86 @@
+---
+title: "Dicas regressão"
+output: html_notebook
+theme: sandstone
+---
+
+Nesse exemplo, examinaremos a relação entre número de tweets dos parlamentares e seu número de seguidores. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(broom)
+library(modelr)
+source(here::here("code/lib.R"))
+theme_set(theme_bw())
+```
+
+
+```{r read}
+atividade = read_projectdata()
+atividade = atividade %>% 
+  filter(seguidores > 0, n_proprio > 0, n_retweet > 0)
+```
+
+As relações só ficam lineares após transformações. 
+
+```{r}
+atividade %>% 
+  ggplot(aes(x = n_proprio, y = seguidores)) + 
+  geom_point()
+
+atividade %>% 
+  ggplot(aes(x = n_proprio, y = seguidores)) + 
+  geom_point() + 
+  scale_y_log10() + 
+  scale_x_log10()
+
+atividade %>% 
+  ggplot(aes(x = n_retweet, y = seguidores)) + 
+  geom_point() + 
+  scale_y_log10() + 
+  scale_x_log10()
+```
+
+```{r}
+atividade = atividade %>% 
+  mutate(seguidores_log = log10(seguidores), 
+         n_proprio_log = log10(n_proprio), 
+         n_retweet_log = log10(n_retweet))
+```
+
+
+```{r}
+modelo = lm(seguidores_log ~ n_proprio_log + n_retweet_log + casa, 
+   data = atividade)
+
+tidy(modelo)
+```
+
+Podemos usar predict para prever qual o número de seguidores para um valor de nossas variáveis. Só que temos que escolher valores: 
+
+```{r}
+para_plotar_modelo = atividade %>% 
+  data_grid(n_proprio_log = seq_range(n_proprio_log, 10), # Crie um vetor de 10 valores no range
+            n_retweet_log = mean(n_retweet_log), # todos na média
+            casa = "senado") %>% 
+  add_predictions(modelo)
+
+glimpse(para_plotar_modelo)
+```
+
+Visualizando log log: 
+
+```{r}
+ggplot(data = atividade, aes(x = n_proprio_log)) + 
+  geom_point(aes(y = seguidores_log)) + 
+  geom_line(data = para_plotar_modelo, aes(y = pred), color = "orange", size = 1.5)
+```
+
+Desfazendo a transformação:
+
+```{r}
+ggplot(data = atividade, aes(x = 10**n_proprio_log)) + 
+  # geom_point(aes(y = 10**seguidores_log)) + 
+  geom_line(data = para_plotar_modelo, aes(y = 10**pred), color = "orange", size = 1.5)
+```
+
